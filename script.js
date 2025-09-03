@@ -1,99 +1,165 @@
-const balanceEl = document.getElementById("balance");
-const incomeAmountEl = document.getElementById("income-amount");
-const expenseAmountEl = document.getElementById("expense-amount");
-const transactionListEl = document.getElementById("transaction-list");
-const transactionFormEl = document.getElementById("transaction-form");
-const descriptionEl = document.getElementById("description");
-const amountEl = document.getElementById("amount");
+const searchInput = document.getElementById("search-input");
+const searchBtn = document.getElementById("search-btn");
+const randomBtn = document.getElementById("random-btn");
+const mealsContainer = document.getElementById("meals");
+const resultHeading = document.getElementById("result-heading");
+const errorContainer = document.getElementById("error-container");
+const mealDetails = document.getElementById("meal-details");
+const mealDetailsContent = document.querySelector(".meal-details-content");
+const backBtn = document.getElementById("back-btn");
 
-let transactions = JSON.parse(localStorage.getItem("transactions")) || [];
+const categoryFilter = document.getElementById("category-filter");
+const areaFilter = document.getElementById("area-filter");
 
-transactionFormEl.addEventListener("submit", addTransaction);
+const BASE_URL = "https://www.themealdb.com/api/json/v1/1/";
 
-function addTransaction(e) {
-  e.preventDefault();
+// EVENTS
+searchBtn.addEventListener("click", searchMeals);
+randomBtn.addEventListener("click", getRandomMeal);
+mealsContainer.addEventListener("click", handleMealClick);
+backBtn.addEventListener("click", () => mealDetails.classList.add("hidden"));
+searchInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") searchMeals();
+});
+categoryFilter.addEventListener("change", filterByCategory);
+areaFilter.addEventListener("change", filterByArea);
 
-  // get form values
-  const description = descriptionEl.value.trim();
-  const amount = parseFloat(amountEl.value);
+// FUNCTIONS
+async function searchMeals() {
+  const term = searchInput.value.trim();
+  if (!term) return showError("Please enter a search term");
 
-  transactions.push({
-    id: Date.now(),
-    description,
-    amount,
-  });
-
-  localStorage.setItem("transactions", JSON.stringify(transactions));
-
-  updateTransactionList();
-  updateSummary();
-
-  transactionFormEl.reset();
+  try {
+    const res = await fetch(`${BASE_URL}search.php?s=${term}`);
+    const data = await res.json();
+    if (!data.meals) {
+      showError(`No recipes found for "${term}"`);
+      return;
+    }
+    resultHeading.textContent = `Results for "${term}"`;
+    displayMeals(data.meals);
+  } catch {
+    showError("Something went wrong. Try again.");
+  }
 }
 
-function updateTransactionList() {
-  transactionListEl.innerHTML = "";
-
-  const sortedTransactions = [...transactions].reverse();
-
-  sortedTransactions.forEach((transaction) => {
-    const transactionEl = createTransactionElement(transaction);
-    transactionListEl.appendChild(transactionEl);
-  });
+async function getRandomMeal() {
+  try {
+    const res = await fetch(`${BASE_URL}random.php`);
+    const data = await res.json();
+    resultHeading.textContent = "Random Recipe";
+    displayMeals(data.meals);
+  } catch {
+    showError("Failed to load random recipe");
+  }
 }
 
-function createTransactionElement(transaction) {
-  const li = document.createElement("li");
-  li.classList.add("transaction");
-  li.classList.add(transaction.amount > 0 ? "income" : "expense");
+function displayMeals(meals) {
+  errorContainer.classList.add("hidden");
+  mealsContainer.innerHTML = meals
+    .map(
+      (meal) => `
+    <div class="meal" data-meal-id="${meal.idMeal}">
+      <img src="${meal.strMealThumb}" alt="${meal.strMeal}">
+      <div class="meal-info">
+        <h3>${meal.strMeal}</h3>
+        <div class="meal-category">${meal.strCategory || ""}</div>
+      </div>
+    </div>`
+    )
+    .join("");
+}
 
-  li.innerHTML = `
-    <span>${transaction.description}</span>
-    <span>
-  
-    ${formatCurrency(transaction.amount)}
-      <button class="delete-btn" onclick="removeTransaction(${transaction.id})">x</button>
-    </span>
+async function handleMealClick(e) {
+  const mealEl = e.target.closest(".meal");
+  if (!mealEl) return;
+
+  const mealId = mealEl.dataset.mealId;
+  const res = await fetch(`${BASE_URL}lookup.php?i=${mealId}`);
+  const data = await res.json();
+  if (data.meals) showMealDetails(data.meals[0]);
+}
+
+function showMealDetails(meal) {
+  const ingredients = [];
+  for (let i = 1; i <= 20; i++) {
+    if (meal[`strIngredient${i}`]) {
+      ingredients.push(`${meal[`strMeasure${i}`]} ${meal[`strIngredient${i}`]}`);
+    }
+  }
+
+  mealDetailsContent.innerHTML = `
+    <img src="${meal.strMealThumb}" alt="${meal.strMeal}" class="meal-details-img">
+    <h2 class="meal-details-title">${meal.strMeal}</h2>
+    <p><strong>Category:</strong> ${meal.strCategory || "N/A"}</p>
+    <p><strong>Area:</strong> ${meal.strArea || "N/A"}</p>
+    <div class="meal-details-instructions">
+      <h3>Instructions</h3>
+      <p>${meal.strInstructions}</p>
+    </div>
+    <div class="meal-details-ingredients">
+      <h3>Ingredients</h3>
+      <ul class="ingredients-list">
+        ${ingredients.map((ing) => `<li>🍴 ${ing}</li>`).join("")}
+      </ul>
+    </div>
+    ${
+      meal.strYoutube
+        ? `<a href="${meal.strYoutube}" target="_blank" class="youtube-link"><i class="fab fa-youtube"></i> Watch on YouTube</a>`
+        : ""
+    }
   `;
-
-  return li;
+  mealDetails.classList.remove("hidden");
+  mealDetails.scrollIntoView({ behavior: "smooth" });
 }
 
-function updateSummary() {
-  // 100, -50, 200, -200 => 50
-  const balance = transactions.reduce((acc, transaction) => acc + transaction.amount, 0);
-
-  const income = transactions
-    .filter((transaction) => transaction.amount > 0)
-    .reduce((acc, transaction) => acc + transaction.amount, 0);
-
-  const expenses = transactions
-    .filter((transaction) => transaction.amount < 0)
-    .reduce((acc, transaction) => acc + transaction.amount, 0);
-
-  // update ui => todo: fix the formatting
-  balanceEl.textContent = formatCurrency(balance);
-  incomeAmountEl.textContent = formatCurrency(income);
-  expenseAmountEl.textContent = formatCurrency(expenses);
+function showError(msg) {
+  errorContainer.textContent = msg;
+  errorContainer.classList.remove("hidden");
+  mealsContainer.innerHTML = "";
+  resultHeading.textContent = "";
 }
 
-function formatCurrency(number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(number);
+// FILTERS
+async function loadFilters() {
+  try {
+    const catRes = await fetch(`${BASE_URL}list.php?c=list`);
+    const catData = await catRes.json();
+    catData.meals.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.strCategory;
+      opt.textContent = c.strCategory;
+      categoryFilter.appendChild(opt);
+    });
+
+    const areaRes = await fetch(`${BASE_URL}list.php?a=list`);
+    const areaData = await areaRes.json();
+    areaData.meals.forEach((a) => {
+      const opt = document.createElement("option");
+      opt.value = a.strArea;
+      opt.textContent = a.strArea;
+      areaFilter.appendChild(opt);
+    });
+  } catch {
+    console.error("Filters failed to load");
+  }
 }
 
-function removeTransaction(id) {
-  // filter out the one we wanted to delete
-  transactions = transactions.filter((transaction) => transaction.id !== id);
-
-  localStorage.setItem("transcations", JSON.stringify(transactions));
-
-  updateTransactionList();
-  updateSummary();
+async function filterByCategory(e) {
+  if (!e.target.value) return;
+  const res = await fetch(`${BASE_URL}filter.php?c=${e.target.value}`);
+  const data = await res.json();
+  resultHeading.textContent = `Category: ${e.target.value}`;
+  displayMeals(data.meals);
 }
 
-// initial render
-updateTransactionList();
-updateSummary();
+async function filterByArea(e) {
+  if (!e.target.value) return;
+  const res = await fetch(`${BASE_URL}filter.php?a=${e.target.value}`);
+  const data = await res.json();
+  resultHeading.textContent = `Cuisine: ${e.target.value}`;
+  displayMeals(data.meals);
+}
+
+// INIT
+loadFilters();
