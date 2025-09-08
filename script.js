@@ -1,165 +1,165 @@
-const searchInput = document.getElementById("search-input");
+const searchInput = document.getElementById("search");
 const searchBtn = document.getElementById("search-btn");
-const randomBtn = document.getElementById("random-btn");
-const mealsContainer = document.getElementById("meals");
-const resultHeading = document.getElementById("result-heading");
+const profileContainer = document.getElementById("profile-container");
 const errorContainer = document.getElementById("error-container");
-const mealDetails = document.getElementById("meal-details");
-const mealDetailsContent = document.querySelector(".meal-details-content");
-const backBtn = document.getElementById("back-btn");
+const avatar = document.getElementById("avatar");
+const nameElement = document.getElementById("name");
+const usernameElement = document.getElementById("username");
+const bioElement = document.getElementById("bio");
+const locationElement = document.getElementById("location");
+const joinedDateElement = document.getElementById("joined-date");
+const profileLink = document.getElementById("profile-link");
+const followers = document.getElementById("followers");
+const following = document.getElementById("following");
+const repos = document.getElementById("repos");
+const companyElement = document.getElementById("company");
+const blogElement = document.getElementById("blog");
+const twitterElement = document.getElementById("twitter");
+const companyContainer = document.getElementById("company-container");
+const blogContainer = document.getElementById("blog-container");
+const twitterContainer = document.getElementById("twitter-container");
+const reposContainer = document.getElementById("repos-container");
 
-const categoryFilter = document.getElementById("category-filter");
-const areaFilter = document.getElementById("area-filter");
-
-const BASE_URL = "https://www.themealdb.com/api/json/v1/1/";
-
-// EVENTS
-searchBtn.addEventListener("click", searchMeals);
-randomBtn.addEventListener("click", getRandomMeal);
-mealsContainer.addEventListener("click", handleMealClick);
-backBtn.addEventListener("click", () => mealDetails.classList.add("hidden"));
+searchBtn.addEventListener("click", searchUser);
 searchInput.addEventListener("keypress", (e) => {
-  if (e.key === "Enter") searchMeals();
+  if (e.key === "Enter") searchUser();
 });
-categoryFilter.addEventListener("change", filterByCategory);
-areaFilter.addEventListener("change", filterByArea);
 
-// FUNCTIONS
-async function searchMeals() {
-  const term = searchInput.value.trim();
-  if (!term) return showError("Please enter a search term");
+async function searchUser() {
+  const username = searchInput.value.trim();
+
+  if (!username) return alert("Please enter a username");
 
   try {
-    const res = await fetch(`${BASE_URL}search.php?s=${term}`);
-    const data = await res.json();
-    if (!data.meals) {
-      showError(`No recipes found for "${term}"`);
-      return;
-    }
-    resultHeading.textContent = `Results for "${term}"`;
-    displayMeals(data.meals);
-  } catch {
-    showError("Something went wrong. Try again.");
+    // reset the ui
+    profileContainer.classList.add("hidden");
+    errorContainer.classList.add("hidden");
+
+    // https://api.github.com/users/Sabajasmine
+    const response = await fetch(`https://api.github.com/users/${username}`);
+    if (!response.ok) throw new Error("User not found");
+
+    const userData = await response.json();
+    console.log("user data is here", userData);
+
+    displayUserData(userData);
+
+    fetchRepositories(userData.repos_url);
+  } catch (error) {
+    showError();
   }
 }
 
-async function getRandomMeal() {
+async function fetchRepositories(reposUrl) {
+  reposContainer.innerHTML = '<div class="loading-repos">Loading repositories...</div>';
+
   try {
-    const res = await fetch(`${BASE_URL}random.php`);
-    const data = await res.json();
-    resultHeading.textContent = "Random Recipe";
-    displayMeals(data.meals);
-  } catch {
-    showError("Failed to load random recipe");
+    const response = await fetch(reposUrl + "?per_page=6");
+    const repos = await response.json();
+    displayRepos(repos);
+  } catch (error) {
+    reposContainer.innerHTML = `<div class="no-repos">${error.message}</div>`;
   }
 }
 
-function displayMeals(meals) {
-  errorContainer.classList.add("hidden");
-  mealsContainer.innerHTML = meals
-    .map(
-      (meal) => `
-    <div class="meal" data-meal-id="${meal.idMeal}">
-      <img src="${meal.strMealThumb}" alt="${meal.strMeal}">
-      <div class="meal-info">
-        <h3>${meal.strMeal}</h3>
-        <div class="meal-category">${meal.strCategory || ""}</div>
+function displayRepos(repos) {
+  if (repos.length === 0) {
+    reposContainer.innerHTML = '<div class="no-repos">No repositories found</div>';
+    return;
+  }
+
+  reposContainer.innerHTML = "";
+
+  repos.forEach((repo) => {
+    const repoCard = document.createElement("div");
+    repoCard.className = "repo-card";
+
+    const updatedAt = formatDate(repo.updated_at);
+
+    repoCard.innerHTML = `
+      <a href="${repo.html_url}" target="_blank" class="repo-name">
+        <i class="fas fa-code-branch"></i> ${repo.name}
+      </a>
+      <p class="repo-description">${repo.description || "No description available"}</p>
+      <div class="repo-meta">
+        ${
+          repo.language
+            ? `
+          <div class="repo-meta-item">
+            <i class="fas fa-circle"></i> ${repo.language}
+          </div>
+        `
+            : ""
+        }
+        <div class="repo-meta-item">
+          <i class="fas fa-star"></i> ${repo.stargazers_count}
+        </div>
+        <div class="repo-meta-item">
+          <i class="fas fa-code-fork"></i> ${repo.forks_count}
+        </div>
+        <div class="repo-meta-item">
+          <i class="fas fa-history"></i> ${updatedAt}
+        </div>
       </div>
-    </div>`
-    )
-    .join("");
+    `;
+
+    reposContainer.appendChild(repoCard);
+  });
 }
 
-async function handleMealClick(e) {
-  const mealEl = e.target.closest(".meal");
-  if (!mealEl) return;
+function displayUserData(user) {
+  avatar.src = user.avatar_url;
+  nameElement.textContent = user.name || user.login;
+  usernameElement.textContent = `@${user.login}`;
+  bioElement.textContent = user.bio || "No bio available";
 
-  const mealId = mealEl.dataset.mealId;
-  const res = await fetch(`${BASE_URL}lookup.php?i=${mealId}`);
-  const data = await res.json();
-  if (data.meals) showMealDetails(data.meals[0]);
-}
+  locationElement.textContent = user.location || "Not specified";
+  joinedDateElement.textContent = formatDate(user.created_at);
 
-function showMealDetails(meal) {
-  const ingredients = [];
-  for (let i = 1; i <= 20; i++) {
-    if (meal[`strIngredient${i}`]) {
-      ingredients.push(`${meal[`strMeasure${i}`]} ${meal[`strIngredient${i}`]}`);
-    }
+  profileLink.href = user.html_url;
+  followers.textContent = user.followers;
+  following.textContent = user.following;
+  repos.textContent = user.public_repos;
+
+  if (user.company) companyElement.textContent = user.company;
+  else companyElement.textContent = "Not specified";
+
+  if (user.blog) {
+    blogElement.textContent = user.blog;
+    blogElement.href = user.blog.startsWith("http") ? user.blog : `https://${user.blog}`;
+  } else {
+    blogElement.textContent = "No website";
+    blogElement.href = "#";
   }
 
-  mealDetailsContent.innerHTML = `
-    <img src="${meal.strMealThumb}" alt="${meal.strMeal}" class="meal-details-img">
-    <h2 class="meal-details-title">${meal.strMeal}</h2>
-    <p><strong>Category:</strong> ${meal.strCategory || "N/A"}</p>
-    <p><strong>Area:</strong> ${meal.strArea || "N/A"}</p>
-    <div class="meal-details-instructions">
-      <h3>Instructions</h3>
-      <p>${meal.strInstructions}</p>
-    </div>
-    <div class="meal-details-ingredients">
-      <h3>Ingredients</h3>
-      <ul class="ingredients-list">
-        ${ingredients.map((ing) => `<li>🍴 ${ing}</li>`).join("")}
-      </ul>
-    </div>
-    ${
-      meal.strYoutube
-        ? `<a href="${meal.strYoutube}" target="_blank" class="youtube-link"><i class="fab fa-youtube"></i> Watch on YouTube</a>`
-        : ""
-    }
-  `;
-  mealDetails.classList.remove("hidden");
-  mealDetails.scrollIntoView({ behavior: "smooth" });
+  blogContainer.style.display = "flex";
+
+  if (user.twitter_username) {
+    twitterElement.textContent = `@${user.twitter_username}`;
+    twitterElement.href = `https://twitter.com/${user.twitter_username}`;
+  } else {
+    twitterElement.textContent = "No Twitter";
+    twitterElement.href = "#";
+  }
+
+  twitterContainer.style.display = "flex";
+
+  // show the profile
+  profileContainer.classList.remove("hidden");
 }
 
-function showError(msg) {
-  errorContainer.textContent = msg;
+function showError() {
   errorContainer.classList.remove("hidden");
-  mealsContainer.innerHTML = "";
-  resultHeading.textContent = "";
+  profileContainer.classList.add("hidden");
 }
 
-// FILTERS
-async function loadFilters() {
-  try {
-    const catRes = await fetch(`${BASE_URL}list.php?c=list`);
-    const catData = await catRes.json();
-    catData.meals.forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c.strCategory;
-      opt.textContent = c.strCategory;
-      categoryFilter.appendChild(opt);
-    });
-
-    const areaRes = await fetch(`${BASE_URL}list.php?a=list`);
-    const areaData = await areaRes.json();
-    areaData.meals.forEach((a) => {
-      const opt = document.createElement("option");
-      opt.value = a.strArea;
-      opt.textContent = a.strArea;
-      areaFilter.appendChild(opt);
-    });
-  } catch {
-    console.error("Filters failed to load");
-  }
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
-async function filterByCategory(e) {
-  if (!e.target.value) return;
-  const res = await fetch(`${BASE_URL}filter.php?c=${e.target.value}`);
-  const data = await res.json();
-  resultHeading.textContent = `Category: ${e.target.value}`;
-  displayMeals(data.meals);
-}
-
-async function filterByArea(e) {
-  if (!e.target.value) return;
-  const res = await fetch(`${BASE_URL}filter.php?a=${e.target.value}`);
-  const data = await res.json();
-  resultHeading.textContent = `Cuisine: ${e.target.value}`;
-  displayMeals(data.meals);
-}
-
-// INIT
-loadFilters();
+searchInput.value = "Sabajasmine";
+searchUser();
