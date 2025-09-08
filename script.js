@@ -161,5 +161,5 @@ function formatDate(dateString) {
   });
 }
 
-searchInput.value = "Sabajasmine";
+searchInput.value = "";
 searchUser();
